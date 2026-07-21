@@ -9,6 +9,12 @@
 #include <math.h>
 #include <stdint.h>
 
+#define GL_TEXTURE0                       0x84C0
+#define GL_TEXTURE1                       0x84C1
+#define GL_TEXTURE2                       0x84C2
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 // ==================== ТИПЫ И КОНСТАНТЫ OPENGL ====================
 typedef uint32_t GLuint;
 typedef int32_t GLint;
@@ -30,11 +36,21 @@ typedef uint32_t GLbitfield;
 #define GL_STATIC_DRAW                    0x88E4
 #define GL_TRIANGLES                      0x0004
 #define GL_UNSIGNED_INT                   0x1405
+#define GL_FLOAT                          0x1406
 #define GL_COLOR_BUFFER_BIT               0x4000
 #define GL_DEPTH_BUFFER_BIT               0x0100
 #define GL_FALSE                          0
-#define GL_FLOAT                          0x1406
 #define GL_TRUE                           1
+#define GL_TEXTURE0                       0x84C0
+#define GL_TEXTURE_2D                     0x0DE1
+#define GL_TEXTURE_WRAP_S                 0x2802
+#define GL_TEXTURE_WRAP_T                 0x2803
+#define GL_TEXTURE_MIN_FILTER             0x2801
+#define GL_TEXTURE_MAG_FILTER             0x2800
+#define GL_LINEAR                         0x2601
+#define GL_REPEAT                         0x2901
+#define GL_RGBA                           0x1908
+#define GL_UNSIGNED_BYTE                  0x1401
 
 // ==================== УКАЗАТЕЛИ НА ФУНКЦИИ ====================
 typedef GLuint (*PFNGLCREATESHADERPROC)(GLenum type);
@@ -53,6 +69,7 @@ typedef void (*PFNGLUSEPROGRAMPROC)(GLuint program);
 typedef GLint (*PFNGLGETUNIFORMLOCATIONPROC)(GLuint program, const GLchar* name);
 typedef void (*PFNGLUNIFORM3FPROC)(GLint location, GLfloat v0, GLfloat v1, GLfloat v2);
 typedef void (*PFNGLUNIFORM1FPROC)(GLint location, GLfloat v0);
+typedef void (*PFNGLUNIFORM1IPROC)(GLint location, GLint v0);
 typedef void (*PFNGLGENVERTEXARRAYSPROC)(GLsizei n, GLuint* arrays);
 typedef void (*PFNGLGENBUFFERSPROC)(GLsizei n, GLuint* buffers);
 typedef void (*PFNGLBINDVERTEXARRAYPROC)(GLuint array);
@@ -65,6 +82,11 @@ typedef void (*PFNGLDELETEVERTEXARRAYSPROC)(GLsizei n, const GLuint* arrays);
 typedef void (*PFNGLDELETEBUFFERSPROC)(GLsizei n, const GLuint* buffers);
 typedef void (*PFNGLDELETEPROGRAMPROC)(GLuint program);
 typedef void (*PFNGLCLEARPROC)(GLbitfield mask);
+typedef void (*PFNGLGENTEXTURESPROC)(GLsizei n, GLuint* textures);
+typedef void (*PFNGLBINDTEXTUREPROC)(GLenum target, GLuint texture);
+typedef void (*PFNGLTEXIMAGE2DPROC)(GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const void* pixels);
+typedef void (*PFNGLTEXPARAMETERIPROC)(GLenum target, GLenum pname, GLint param);
+typedef void (*PFNGLACTIVETEXTUREPROC)(GLenum texture);
 
 static PFNGLCREATESHADERPROC pglCreateShader = nullptr;
 static PFNGLSHADERSOURCEPROC pglShaderSource = nullptr;
@@ -82,6 +104,7 @@ static PFNGLUSEPROGRAMPROC pglUseProgram = nullptr;
 static PFNGLGETUNIFORMLOCATIONPROC pglGetUniformLocation = nullptr;
 static PFNGLUNIFORM3FPROC pglUniform3f = nullptr;
 static PFNGLUNIFORM1FPROC pglUniform1f = nullptr;
+static PFNGLUNIFORM1IPROC pglUniform1i = nullptr;
 static PFNGLGENVERTEXARRAYSPROC pglGenVertexArrays = nullptr;
 static PFNGLGENBUFFERSPROC pglGenBuffers = nullptr;
 static PFNGLBINDVERTEXARRAYPROC pglBindVertexArray = nullptr;
@@ -94,6 +117,11 @@ static PFNGLDELETEVERTEXARRAYSPROC pglDeleteVertexArrays = nullptr;
 static PFNGLDELETEBUFFERSPROC pglDeleteBuffers = nullptr;
 static PFNGLDELETEPROGRAMPROC pglDeleteProgram = nullptr;
 static PFNGLCLEARPROC pglClear = nullptr;
+static PFNGLGENTEXTURESPROC pglGenTextures = nullptr;
+static PFNGLBINDTEXTUREPROC pglBindTexture = nullptr;
+static PFNGLTEXIMAGE2DPROC pglTexImage2D = nullptr;
+static PFNGLTEXPARAMETERIPROC pglTexParameteri = nullptr;
+static PFNGLACTIVETEXTUREPROC pglActiveTexture = nullptr;
 
 bool loadOpenGLFunctions() {
     pglCreateShader = (PFNGLCREATESHADERPROC)glfwGetProcAddress("glCreateShader");
@@ -112,6 +140,7 @@ bool loadOpenGLFunctions() {
     pglGetUniformLocation = (PFNGLGETUNIFORMLOCATIONPROC)glfwGetProcAddress("glGetUniformLocation");
     pglUniform3f = (PFNGLUNIFORM3FPROC)glfwGetProcAddress("glUniform3f");
     pglUniform1f = (PFNGLUNIFORM1FPROC)glfwGetProcAddress("glUniform1f");
+    pglUniform1i = (PFNGLUNIFORM1IPROC)glfwGetProcAddress("glUniform1i");
     pglGenVertexArrays = (PFNGLGENVERTEXARRAYSPROC)glfwGetProcAddress("glGenVertexArrays");
     pglGenBuffers = (PFNGLGENBUFFERSPROC)glfwGetProcAddress("glGenBuffers");
     pglBindVertexArray = (PFNGLBINDVERTEXARRAYPROC)glfwGetProcAddress("glBindVertexArray");
@@ -124,6 +153,11 @@ bool loadOpenGLFunctions() {
     pglDeleteBuffers = (PFNGLDELETEBUFFERSPROC)glfwGetProcAddress("glDeleteBuffers");
     pglDeleteProgram = (PFNGLDELETEPROGRAMPROC)glfwGetProcAddress("glDeleteProgram");
     pglClear = (PFNGLCLEARPROC)glfwGetProcAddress("glClear");
+    pglGenTextures = (PFNGLGENTEXTURESPROC)glfwGetProcAddress("glGenTextures");
+    pglBindTexture = (PFNGLBINDTEXTUREPROC)glfwGetProcAddress("glBindTexture");
+    pglTexImage2D = (PFNGLTEXIMAGE2DPROC)glfwGetProcAddress("glTexImage2D");
+    pglTexParameteri = (PFNGLTEXPARAMETERIPROC)glfwGetProcAddress("glTexParameteri");
+    pglActiveTexture = (PFNGLACTIVETEXTUREPROC)glfwGetProcAddress("glActiveTexture");
 
     if (!pglCreateShader || !pglCreateProgram || !pglUseProgram || !pglGenVertexArrays) {
         fprintf(stderr, "Failed to load OpenGL functions via GLFW\n");
@@ -153,6 +187,9 @@ uniform vec3 camDir;
 uniform vec3 camRight;
 uniform vec3 camUp;
 uniform float fov;
+uniform sampler2D wallTexture;
+uniform sampler2D floorTexture;
+uniform sampler2D skullTexture;
 
 int getVoxel(vec3 p) {
     int x = int(floor(p.x));
@@ -160,23 +197,27 @@ int getVoxel(vec3 p) {
     int z = int(floor(p.z));
     
     if (x < 0 || x >= 16 || z < 0 || z >= 16) return 1;
-    if (y < 0 || y >= 5) return 1;
+    if (y < 0 || y >= 5) return 2;
     
     return 0;
 }
 
-vec3 getVoxelColor(int voxel, vec3 pos, vec3 normal) {
-    float checker = mod(floor(pos.x) + floor(pos.z), 2.0) * 0.15;
-    
-    if (voxel == 1) return vec3(0.5 + checker, 0.5 + checker, 0.6 + checker);
-    if (voxel == 2) return vec3(0.4, 0.3, 0.2);
-    if (voxel == 3) {
-        vec3 c = vec3(0.6, 0.5, 0.4);
-        if (fract(pos.x) < 0.05 || fract(pos.z) < 0.05) c *= 1.3;
-        return c;
+vec2 getUV(int voxel, vec3 hitPos, vec3 normal) {
+    vec2 uv;
+    if (voxel == 1) {
+        // Стены - проекция на XZ
+        if (abs(normal.x) > 0.5) {
+            uv = vec2(hitPos.z, hitPos.y);
+        } else {
+            uv = vec2(hitPos.x, hitPos.y);
+        }
+    } else if (voxel == 2) {
+        // Пол/потолок
+        uv = vec2(hitPos.x, hitPos.z);
+    } else {
+        uv = vec2(0.0);
     }
-    if (voxel == 4) return vec3(0.8, 0.2, 0.2);
-    return vec3(0.0);
+    return uv;
 }
 
 void main() {
@@ -185,8 +226,8 @@ void main() {
     vec2 uv = pixelUV * 2.0 - 1.0;
     uv.y = -uv.y;
     
-    vec3 rayDir = normalize(camDir + fov * uv.x * camRight + fov * uv.y * camUp);
-    
+    float aspect = 1280.0 / 720.0;
+    vec3 rayDir = normalize(camDir + fov * uv.x * camRight * aspect + fov * uv.y * camUp);
     vec3 mapPos = floor(camPos);
     vec3 deltaDist = abs(vec3(1.0 / rayDir.x, 1.0 / rayDir.y, 1.0 / rayDir.z));
     if (rayDir.x == 0.0) deltaDist.x = 1e30;
@@ -227,20 +268,34 @@ void main() {
     
     if (voxel != 0) {
         vec3 hitPos = camPos + rayDir * dist;
-        vec3 color = getVoxelColor(voxel, hitPos, normal);
+        vec2 texUV = getUV(voxel, hitPos, normal);
         
+        vec3 color;
+        if (voxel == 1) {
+            color = texture(wallTexture, texUV).rgb;
+        } else if (voxel == 2) {
+            if (normal.y > 0.5) {
+                // Потолок - тёмный
+                color = vec3(0.1, 0.1, 0.15);
+            } else {
+                // Пол
+                color = texture(floorTexture, texUV).rgb;
+            }
+        } else {
+            color = vec3(1.0, 0.0, 1.0);
+        }
+        
+        // Освещение
         vec3 lightDir = normalize(vec3(0.5, 0.8, 0.3));
         float diff = max(dot(normal, lightDir), 0.0);
-        float ambient = 0.25;
+        float ambient = 0.3;
+        color = color * (ambient + diff * 0.7);
         
-        ambient *= (0.6 + 0.4 * (1.0 - hitPos.y / 5.0));
-        color = color * (ambient + diff * 0.75);
-        
+        // Туман
         float fog = 1.0 - min(dist / 14.0, 1.0);
         color *= fog;
         
-        color = floor(color * 16.0) / 16.0;
-        
+        // Прицел
         if (abs(uv.x) < 0.015 && abs(uv.y) < 0.015) color = vec3(1.0, 1.0, 1.0);
         
         FragColor = vec4(color, 1.0);
@@ -249,6 +304,32 @@ void main() {
     }
 }
 )glsl";
+
+// ==================== ЗАГРУЗКА ТЕКСТУР ====================
+GLuint loadTexture(const char* path) {
+    GLuint texture;
+    pglGenTextures(1, &texture);
+    
+    int width, height, channels;
+    stbi_set_flip_vertically_on_load(1);
+    unsigned char* data = stbi_load(path, &width, &height, &channels, 4);
+    
+    if (data) {
+        pglBindTexture(GL_TEXTURE_2D, texture);
+        pglTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+        pglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        pglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        pglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        pglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        stbi_image_free(data);
+        printf("Loaded texture: %s (%dx%d)\n", path, width, height);
+    } else {
+        printf("Failed to load texture: %s\n", path);
+        stbi_image_free(data);
+    }
+    
+    return texture;
+}
 
 // ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
 unsigned int compileShader(unsigned int type, const char* source) {
@@ -305,7 +386,7 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
 
     float sensitivity = 0.15f;
     yaw += xoffset * sensitivity;
-    pitch -= yoffset * sensitivity;
+    pitch -= yoffset * sensitivity; // Инвертировано
 
     if (pitch > 89.0f) pitch = 89.0f;
     if (pitch < -89.0f) pitch = -89.0f;
@@ -350,6 +431,11 @@ int main() {
 
     unsigned int shaderProgram = createShaderProgram(vertexShaderSource, fragmentShaderSource);
 
+    // Загрузка текстур
+    GLuint wallTex = loadTexture("textures/wall.png");
+    GLuint floorTex = loadTexture("textures/floor.png");
+    GLuint skullTex = loadTexture("textures/skull.png");
+
     float quadVertices[] = {
         -1.0f,  1.0f,
         -1.0f, -1.0f,
@@ -389,13 +475,13 @@ int main() {
         float radYaw = yaw * 3.14159265f / 180.0f;
         float radPitch = pitch * 3.14159265f / 180.0f;
 
-        float fx = sin(radYaw) * cos(radPitch);
-        float fy = sin(radPitch);
-        float fz = -cos(radYaw) * cos(radPitch);
+        float fx = cos(radPitch) * sin(radYaw);
+	float fy = sin(radPitch);
+	float fz = cos(radPitch) * cos(radYaw);
 
-        float rx = -fz;
-        float ry = 0.0f;
-        float rz = fx;
+	float rx = cos(radYaw);
+	float ry = 0.0f;
+        float rz = -sin(radYaw);
 
         if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) { camX += fx * velocity; camY += fy * velocity; camZ += fz * velocity; }
         if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) { camX -= fx * velocity; camY -= fy * velocity; camZ -= fz * velocity; }
@@ -408,11 +494,24 @@ int main() {
         pglUniform3f(pglGetUniformLocation(shaderProgram, "camDir"), fx, fy, fz);
         pglUniform3f(pglGetUniformLocation(shaderProgram, "camRight"), rx, ry, rz);
         
-        float ux = ry * fz - rz * fy;
-        float uy = rz * fx - rx * fz;
-        float uz = rx * fy - ry * fx;
+        float ux = -sin(radPitch) * sin(radYaw);
+	float uy = cos(radPitch);
+	float uz = -sin(radPitch) * cos(radYaw);
         pglUniform3f(pglGetUniformLocation(shaderProgram, "camUp"), ux, uy, uz);
         pglUniform1f(pglGetUniformLocation(shaderProgram, "fov"), 1.0f);
+        
+        // Привязка текстур
+        pglActiveTexture(GL_TEXTURE0);
+        pglBindTexture(GL_TEXTURE_2D, wallTex);
+        pglUniform1i(pglGetUniformLocation(shaderProgram, "wallTexture"), 0);
+        
+        pglActiveTexture(GL_TEXTURE1);
+        pglBindTexture(GL_TEXTURE_2D, floorTex);
+        pglUniform1i(pglGetUniformLocation(shaderProgram, "floorTexture"), 1);
+        
+        pglActiveTexture(GL_TEXTURE2);
+        pglBindTexture(GL_TEXTURE_2D, skullTex);
+        pglUniform1i(pglGetUniformLocation(shaderProgram, "skullTexture"), 2);
 
         pglBindVertexArray(VAO);
         pglDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
